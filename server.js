@@ -1,5 +1,6 @@
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
@@ -7,62 +8,24 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
-// Increased limit to handle base64 payment screenshots
 app.use(bodyParser.json({ limit: '50mb' }));
 
 /**
- * CENTRALIZED DATABASE (In-Memory for current demo)
- * To integrate Google Cloud Firestore:
- * 1. Install firebase-admin
- * 2. Replace these arrays with db.collection('name').get() calls
+ * PRODUCTION FILE SERVING
+ * This section ensures that index.html is served for all frontend routes.
+ * This is the critical fix for "404 File Not Found" errors.
  */
-let db = {
-  projects: [],
-  vendors: [],
-  payments: [],
-  audit: []
-};
+app.use(express.static(path.join(__dirname, '.')));
 
-// --- API Routes ---
+// API Placeholder (Real data is handled by Firestore via apiService.ts)
+app.get('/api/health', (req, res) => res.json({ status: 'CLOUDRUN_ACTIVE' }));
 
-// Projects
-app.get('/api/projects', (req, res) => res.json(db.projects));
-app.post('/api/projects', (req, res) => {
-  db.projects.push(req.body);
-  res.status(201).json(req.body);
+// The "Catch-All" handler: for any request that doesn't match an API or static file,
+// send back index.html. This enables React Router/SPA functionality.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
-
-// Vendors
-app.get('/api/vendors', (req, res) => res.json(db.vendors));
-app.post('/api/vendors', (req, res) => {
-  db.vendors.push(req.body);
-  res.status(201).json(req.body);
-});
-
-// Payments
-app.get('/api/payments', (req, res) => res.json(db.payments));
-app.post('/api/payments', (req, res) => {
-  db.payments.unshift(req.body);
-  res.status(201).json(req.body);
-});
-
-app.patch('/api/payments/:id', (req, res) => {
-  const { id } = req.params;
-  const update = req.body;
-  db.payments = db.payments.map(p => p.id === id ? { ...p, ...update } : p);
-  res.json({ success: true });
-});
-
-// Audit Logs
-app.get('/api/audit', (req, res) => res.json(db.audit));
-app.post('/api/audit', (req, res) => {
-  db.audit.unshift(req.body);
-  res.status(201).json(req.body);
-});
-
-// Health Check
-app.get('/health', (req, res) => res.send('OK'));
 
 app.listen(PORT, () => {
-  console.log(`IGO COMPLIANCE Centralized Server running on port ${PORT}`);
+  console.log(`IGO COMPLIANCE: Cloud Native Gateway active on port ${PORT}`);
 });

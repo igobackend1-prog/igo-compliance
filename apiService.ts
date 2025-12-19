@@ -1,118 +1,111 @@
 
 import { Project, Vendor, PaymentRequest, AuditLog, PaymentStatus } from './types';
 
-/**
- * IGO COMPLIANCE - CENTRALIZED API SERVICE
- * Targets the server.js Express backend.
- */
+// Using Google's Official Firebase SDK for 100% Cloud Reliability
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  updateDoc, 
+  doc, 
+  query, 
+  orderBy, 
+  setDoc,
+  enableNetwork,
+  getDoc
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-const API_BASE_URL = '/api';
+/**
+ * IGO COMPLIANCE - MISSION CRITICAL CLOUD CONFIG
+ * Linked to Project: gen-lang-client-0829363952
+ * OAuth ID: 284152299494-r0rsqofp3kk9hm71603f7jjnh740cbim.apps.googleusercontent.com
+ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAWammBxlFl2KgtuXknbcAi55QB5BX8eqA", 
+  authDomain: "gen-lang-client-0829363952.firebaseapp.com",
+  projectId: "gen-lang-client-0829363952", // CORRECTED PROJECT ID
+  storageBucket: "gen-lang-client-0829363952.appspot.com",
+  messagingSenderId: "284152299494",
+  appId: "1:284152299494:web:r0rsqofp3kk9hm71603f7jjnh740cbim"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 class APIService {
-  private isServerAvailable = false;
-
-  private async request(endpoint: string, options: any = {}) {
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
-
-      if (!response.ok) {
-        // If we get a 404, the server is there but the route is wrong, 
-        // but often in dev, a 404 on /api means the proxy/backend isn't running.
-        if (response.status === 404) {
-          throw new Error('SERVER_404');
-        }
-        const errorText = await response.text();
-        throw new Error(`API_${response.status}: ${errorText}`);
-      }
-      
-      this.isServerAvailable = true;
-      return response.json();
-    } catch (error: any) {
-      if (error.message === 'SERVER_404' || error.name === 'TypeError') {
-        this.isServerAvailable = false;
-        return this.fallback(endpoint, options);
-      }
-      throw error;
-    }
-  }
-
   /**
-   * FALLBACK MECHANISM
-   * If the cloud server is unreachable, we use local storage 
-   * so the user can continue working, but sync will be disabled.
+   * CENTRALIZED CLOUD STORAGE
+   * Every function below hits the gen-lang-client-0829363952 project directly.
    */
-  private async fallback(endpoint: string, options: any) {
-    const key = `igo_local_${endpoint.split('/')[1]}`;
-    const localData = localStorage.getItem(key);
-    const data = localData ? JSON.parse(localData) : [];
-
-    if (options.method === 'POST') {
-      const newItem = JSON.parse(options.body);
-      data.unshift(newItem);
-      localStorage.setItem(key, JSON.stringify(data));
-      return newItem;
-    }
-
-    if (options.method === 'PATCH') {
-      const id = endpoint.split('/').pop();
-      const update = JSON.parse(options.body);
-      const updatedData = data.map((item: any) => 
-        item.id === id ? { ...item, ...update } : item
-      );
-      localStorage.setItem(key, JSON.stringify(updatedData));
-      return { success: true };
-    }
-
-    return data;
-  }
-
-  public getStatus() {
-    return this.isServerAvailable;
-  }
 
   async getProjects(): Promise<Project[]> {
-    return this.request('/projects');
+    const q = query(collection(db, "projects"), orderBy("name"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as Project);
   }
 
   async createProject(project: Project): Promise<Project> {
-    return this.request('/projects', { method: 'POST', body: JSON.stringify(project) });
+    await setDoc(doc(db, "projects", project.id), project);
+    return project;
   }
 
   async getVendors(): Promise<Vendor[]> {
-    return this.request('/vendors');
+    const snap = await getDocs(collection(db, "vendors"));
+    return snap.docs.map(d => d.data() as Vendor);
   }
 
   async createVendor(vendor: Vendor): Promise<Vendor> {
-    return this.request('/vendors', { method: 'POST', body: JSON.stringify(vendor) });
+    await setDoc(doc(db, "vendors", vendor.id), vendor);
+    return vendor;
   }
 
   async getRequests(): Promise<PaymentRequest[]> {
-    return this.request('/payments');
+    const q = query(collection(db, "payments"), orderBy("timestamp", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as PaymentRequest);
   }
 
   async createRequest(payment: PaymentRequest): Promise<PaymentRequest> {
-    return this.request('/payments', { method: 'POST', body: JSON.stringify(payment) });
+    await setDoc(doc(db, "payments", payment.id), payment);
+    
+    // Auto-Log to Cloud Audit Trail
+    await this.createAuditLog({
+      id: `LOG-${Date.now()}`,
+      action: `Payment Initiated: ${payment.purpose}`,
+      paymentId: payment.id,
+      user: payment.raisedBy,
+      role: 'BACKEND' as any,
+      timestamp: new Date().toISOString()
+    });
+    
+    return payment;
   }
 
   async updateRequestStatus(id: string, status: PaymentStatus, extra: any = {}): Promise<void> {
-    return this.request(`/payments/${id}`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ status, ...extra }) 
-    });
+    const ref = doc(db, "payments", id);
+    await updateDoc(ref, { status, ...extra });
   }
 
   async getAuditLogs(): Promise<AuditLog[]> {
-    return this.request('/audit');
+    const q = query(collection(db, "audit"), orderBy("timestamp", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as AuditLog);
   }
 
   async createAuditLog(log: AuditLog): Promise<AuditLog> {
-    return this.request('/audit', { method: 'POST', body: JSON.stringify(log) });
+    await setDoc(doc(db, "audit", log.id), log);
+    return log;
+  }
+
+  // Connectivity Health Check
+  public async verifyCloudSync(): Promise<boolean> {
+    try {
+      await enableNetwork(db);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 }
 

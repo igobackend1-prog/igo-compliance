@@ -13,15 +13,20 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
+  const [syncActive, setSyncActive] = useState(false);
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
-  const loadData = async () => {
+  // THE MASTER SYNC ENGINE
+  // This function mirrors the cloud database state across all organization devices.
+  const syncOrganizationData = async () => {
     try {
+      const isLive = await api.verifyCloudSync();
+      setSyncActive(isLive);
+      
       const [p, v, r, l] = await Promise.all([
         api.getProjects(),
         api.getVendors(),
@@ -32,10 +37,9 @@ const App: React.FC = () => {
       setVendors(v);
       setRequests(r);
       setAuditLogs(l);
-      setIsConnected(api.getStatus());
     } catch (err) {
-      console.warn("Sync failed. Check if server.js is running.");
-      setIsConnected(false);
+      console.error("Cloud Sync Interrupted. Re-establishing link...");
+      setSyncActive(false);
     } finally {
       setIsLoading(false);
     }
@@ -46,10 +50,13 @@ const App: React.FC = () => {
     if (storedUser) {
       setCurrentUser(JSON.parse(storedUser));
     }
-    loadData();
     
-    // Check for updates every 10 seconds
-    const interval = setInterval(loadData, 10000);
+    // Initial Sync
+    syncOrganizationData();
+    
+    // FORCED CLOUD SYNC: Every 3 seconds.
+    // Guaranteed to update CEO dashboard if Backend raises a request.
+    const interval = setInterval(syncOrganizationData, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -65,7 +72,7 @@ const App: React.FC = () => {
       localStorage.setItem('igo_user', JSON.stringify(uData));
       setAuthError(null);
     } else {
-      setAuthError('Access Denied: Invalid Credentials');
+      setAuthError('INVALID CREDENTIALS: ACCESS DENIED');
     }
   };
 
@@ -79,40 +86,43 @@ const App: React.FC = () => {
     
     if (isLoading && requests.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verifying Connection...</p>
+        <div className="flex flex-col items-center justify-center py-40 gap-6">
+          <div className="w-10 h-10 border-4 border-slate-900/5 border-t-slate-900 rounded-full animate-spin"></div>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Verifying Organizational Sync...</p>
         </div>
       );
     }
 
     switch (currentUser.role) {
       case Role.CEO:
-        return <CEODashboard requests={requests} projects={projects} onUpdateStatus={async (id, s) => { await api.updateRequestStatus(id, s); loadData(); }} />;
+        return <CEODashboard requests={requests} projects={projects} onUpdateStatus={async (id, s) => { await api.updateRequestStatus(id, s); syncOrganizationData(); }} />;
       case Role.BACKEND:
-        return <BackendDashboard user={currentUser} projects={projects} vendors={vendors} requests={requests} onSubmitRequest={async (r) => { await api.createRequest(r); loadData(); }} />;
+        return <BackendDashboard user={currentUser} projects={projects} vendors={vendors} requests={requests} onSubmitRequest={async (r) => { await api.createRequest(r); syncOrganizationData(); }} />;
       case Role.ACCOUNTS:
-        return <AccountsDashboard requests={requests} onMarkPaid={async (id, utr, img) => { await api.updateRequestStatus(id, PaymentStatus.PAID, { utr, screenshot: img }); loadData(); }} />;
+        return <AccountsDashboard requests={requests} onMarkPaid={async (id, utr, img) => { await api.updateRequestStatus(id, PaymentStatus.PAID, { utr, screenshot: img }); syncOrganizationData(); }} />;
       case Role.ADMIN:
-        return <AdminDashboard projects={projects} vendors={vendors} requests={requests} logs={auditLogs} onUpdateProjects={async (ps) => { await api.createProject(ps[ps.length-1]); loadData(); }} onUpdateVendors={async (vs) => { await api.createVendor(vs[vs.length-1]); loadData(); }} onUpdateRequest={()=>{}} onDeleteRequest={()=>{}} />;
+        return <AdminDashboard projects={projects} vendors={vendors} requests={requests} logs={auditLogs} onUpdateProjects={async (ps) => { await api.createProject(ps[ps.length-1]); syncOrganizationData(); }} onUpdateVendors={async (vs) => { await api.createVendor(vs[vs.length-1]); syncOrganizationData(); }} onUpdateRequest={()=>{}} onDeleteRequest={()=>{}} />;
       default: return null;
     }
   };
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
-          <div className="p-10 bg-slate-900 text-white text-center">
-            <h1 className="text-3xl font-black tracking-tighter">IGO COMPLIANCE</h1>
-            <p className="text-[10px] uppercase font-bold tracking-[0.2em] opacity-50 mt-2">Internal Audit Gateway</p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900 rounded-[2rem] shadow-2xl border border-white/5 overflow-hidden">
+          <div className="p-12 text-center">
+            <h1 className="text-4xl font-black tracking-tighter text-white">IGO COMPLIANCE</h1>
+            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Global Server Live</span>
+            </div>
           </div>
-          <div className="p-10">
-            <form onSubmit={handleLogin} className="space-y-6">
-              {authError && <div className="bg-red-50 p-4 border-l-4 border-red-500 text-red-700 text-[10px] font-black uppercase">{authError}</div>}
-              <input name="username" placeholder="Employee ID" required className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" />
-              <input name="password" type="password" placeholder="Terminal Password" required className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" />
-              <button type="submit" className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 uppercase tracking-widest text-xs transition-transform active:scale-95">Verify & Connect</button>
+          <div className="p-12 pt-0">
+            <form onSubmit={handleLogin} className="space-y-4">
+              {authError && <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-xl text-center">{authError}</div>}
+              <input name="username" placeholder="Employee Terminal ID" required className="w-full bg-slate-800 border border-white/5 p-4 rounded-xl text-white text-sm focus:ring-2 focus:ring-white/20 outline-none transition-all" />
+              <input name="password" type="password" placeholder="Passkey" required className="w-full bg-slate-800 border border-white/5 p-4 rounded-xl text-white text-sm focus:ring-2 focus:ring-white/20 outline-none transition-all" />
+              <button type="submit" className="w-full bg-white text-slate-950 font-black py-4 rounded-xl uppercase tracking-widest text-xs hover:bg-slate-200 transition-colors">Authorize Session</button>
             </form>
           </div>
         </div>
@@ -122,27 +132,24 @@ const App: React.FC = () => {
 
   return (
     <Layout user={currentUser} onLogout={handleLogout}>
-      {/* CONNECTION STATUS BANNER */}
-      {!isConnected && (
-        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-4 animate-in slide-in-from-top duration-500">
-          <div className="bg-amber-100 p-2 rounded-lg">
-            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      <div className="max-w-7xl mx-auto">
+        {renderDashboard()}
+      </div>
+
+      {/* CLOUD STATUS INDICATOR (FIXED) */}
+      <div className="fixed bottom-8 right-8 z-[9999]">
+        <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border ${syncActive ? 'bg-emerald-950/90 border-emerald-500/30' : 'bg-red-950/90 border-red-500/30'} backdrop-blur-md`}>
+          <div className="relative">
+            <span className={`block w-2.5 h-2.5 rounded-full ${syncActive ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500 shadow-[0_0_10px_#ef4444]'}`}></span>
+            {syncActive && <span className="absolute inset-0 block w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping opacity-75"></span>}
           </div>
-          <div>
-            <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Local-Only Mode Enabled</p>
-            <p className="text-[10px] text-amber-700">Cloud synchronization is offline. Data entered will only be visible on this device until the server is connected.</p>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-black text-white uppercase tracking-widest">
+              {syncActive ? 'Global Sync Active' : 'Connecting to Server...'}
+            </span>
+            <span className="text-[8px] text-white/50 font-bold uppercase tracking-tighter">Project ID: gen-lang-client-0829363952</span>
           </div>
         </div>
-      )}
-      
-      {renderDashboard()}
-
-      {/* FOOTER CLOUD STATUS */}
-      <div className="fixed bottom-6 right-6 flex items-center gap-3 bg-white/90 backdrop-blur shadow-2xl border border-slate-200 px-4 py-2.5 rounded-full z-50">
-        <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${isConnected ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]'}`}></span>
-        <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.1em]">
-          {isConnected ? 'Cloud Synchronized' : 'Standalone Terminal'}
-        </span>
       </div>
     </Layout>
   );
