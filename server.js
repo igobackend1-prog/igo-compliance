@@ -11,21 +11,71 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 
 /**
- * PRODUCTION FILE SERVING
- * This section ensures that index.html is served for all frontend routes.
- * This is the critical fix for "404 File Not Found" errors.
+ * MASTER ORGANIZATIONAL STATE
+ * In-memory global synchronization object.
  */
-app.use(express.static(path.join(__dirname, '.')));
+let db = {
+  projects: [],
+  vendors: [],
+  requests: [],
+  auditLogs: []
+};
 
-// API Placeholder (Real data is handled by Firestore via apiService.ts)
-app.get('/api/health', (req, res) => res.json({ status: 'CLOUDRUN_ACTIVE' }));
+// API ENDPOINTS
+app.get('/api/sync', (req, res) => {
+  res.json(db);
+});
 
-// The "Catch-All" handler: for any request that doesn't match an API or static file,
-// send back index.html. This enables React Router/SPA functionality.
+app.post('/api/projects', (req, res) => {
+  db.projects.push(req.body);
+  res.status(201).json(req.body);
+});
+
+app.post('/api/vendors', (req, res) => {
+  db.vendors.push(req.body);
+  res.status(201).json(req.body);
+});
+
+app.post('/api/requests', (req, res) => {
+  db.requests.unshift(req.body);
+  const log = {
+    id: `LOG-${Date.now()}`,
+    action: `Payment Request Initiated: ${req.body.purpose}`,
+    paymentId: req.body.id,
+    user: req.body.raisedBy,
+    role: 'BACKEND',
+    timestamp: new Date().toISOString()
+  };
+  db.auditLogs.unshift(log);
+  res.status(201).json(req.body);
+});
+
+app.patch('/api/requests/:id', (req, res) => {
+  const { id } = req.params;
+  const index = db.requests.findIndex(r => r.id === id);
+  if (index !== -1) {
+    db.requests[index] = { ...db.requests[index], ...req.body };
+    res.json(db.requests[index]);
+  } else {
+    res.status(404).json({ error: 'Request not found' });
+  }
+});
+
+// SERVE STATIC FILES
+app.use(express.static(path.join(__dirname)));
+
+// ALWAYS SERVE INDEX.HTML FOR NON-API ROUTES
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  }
 });
 
 app.listen(PORT, () => {
-  console.log(`IGO COMPLIANCE: Cloud Native Gateway active on port ${PORT}`);
+  console.log(`
+  IGO COMPLIANCE: CLOUD GATEWAY ACTIVE
+  Project: gen-lang-client-0829363952
+  Port: ${PORT}
+  ---------------------------------------
+  `);
 });
