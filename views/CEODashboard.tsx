@@ -37,7 +37,10 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-xs font-bold text-slate-500 uppercase mb-2">Pending Approvals</p>
-          <p className="text-3xl font-extrabold text-slate-900">{pending.length}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-3xl font-extrabold text-slate-900">{pending.length}</p>
+            {pending.length > 0 && <span className="flex h-3 w-3 rounded-full bg-blue-500 animate-ping"></span>}
+          </div>
         </div>
         <div className="bg-white p-6 rounded-xl border border-red-200 shadow-sm hover:shadow-md transition-shadow">
           <p className="text-xs font-bold text-red-500 uppercase mb-2">High Risk Flagged</p>
@@ -59,7 +62,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
           onClick={() => setActiveTab('approvals')}
           className={`pb-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'approvals' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
-          DECISION QUEUE ({pending.length})
+          APPROVAL QUEUE ({pending.length})
         </button>
         <button 
           onClick={() => setActiveTab('projects')}
@@ -72,7 +75,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
       {activeTab === 'approvals' ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
           <div className="p-6 border-b border-slate-100 bg-slate-50/30">
-            <h3 className="text-lg font-bold text-slate-800">Pending Decision Queue</h3>
+            <h3 className="text-lg font-bold text-slate-800">Review Pipeline</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -88,7 +91,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {pending.length === 0 ? (
-                  <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No pending requests in queue.</td></tr>
+                  <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic font-medium">No pending requests at this moment. Everything is up to date.</td></tr>
                 ) : (
                   pending.map(req => {
                     const project = projects.find(p => p.id === req.projectId);
@@ -102,7 +105,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                           {req.category === 'Project' ? (
                             <div className="space-y-1">
                               <div className="text-sm font-semibold text-blue-700">{project?.name || req.projectId}</div>
-                              <div className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded inline-block font-bold uppercase">PHASE: {req.projectPhase}</div>
+                              <div className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded inline-block font-bold uppercase tracking-tight">PHASE: {req.projectPhase}</div>
                             </div>
                           ) : (
                             <div className="text-xs font-medium text-slate-400 uppercase italic">Non-Project Vertical</div>
@@ -110,8 +113,8 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                         </td>
                         <td className="px-6 py-4">
                           <div className="space-y-1">
-                            <div className="text-sm font-bold text-slate-800 uppercase">{req.vendorName}</div>
-                            <div className="text-xs bg-yellow-100 text-yellow-900 p-2 rounded-md font-bold leading-tight border border-yellow-200 group-hover:bg-yellow-200 transition-colors">
+                            <div className="text-sm font-bold text-slate-800 uppercase tracking-tight">{req.vendorName}</div>
+                            <div className="text-xs bg-yellow-100 text-yellow-900 p-2 rounded-md font-bold leading-tight border border-yellow-200 group-hover:bg-yellow-200 transition-colors shadow-sm">
                               PURPOSE: {req.purpose}
                             </div>
                           </div>
@@ -158,7 +161,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-800">Master Project Controls</h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest italic">All project data is permanent and auditable</p>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest italic">Perpetual financial visibility across all locations</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -166,15 +169,15 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                   <tr className="bg-slate-50/50">
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Project ID & Name</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Budget</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Spent (Paid)</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Exposure (Pending)</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Budget Utilization</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Spent (Paid)</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Liability (Pending)</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Budget Status</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {projects.length === 0 ? (
-                    <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No projects registered in the system.</td></tr>
+                    <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No project data currently in the master ledger.</td></tr>
                   ) : (
                     projects.map(p => {
                       const spent = calculateSpent(p.id);
@@ -187,28 +190,26 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                         <React.Fragment key={p.id}>
                           <tr className={`hover:bg-slate-50 transition-colors ${expandedProjectId === p.id ? 'bg-blue-50/20' : ''}`}>
                             <td className="px-6 py-4">
-                              <div className="font-bold text-slate-800 text-sm">{p.id}</div>
-                              <div className="text-sm font-black text-blue-700 uppercase tracking-tight">{p.name}</div>
-                              <div className="text-[10px] text-slate-400 font-bold">{p.location} | In-Charge: {p.inCharge}</div>
+                              <div className="font-bold text-slate-800 text-sm tracking-tight">{p.id}</div>
+                              <div className="text-sm font-black text-blue-800 uppercase">{p.name}</div>
+                              <div className="text-[10px] text-slate-400 font-bold uppercase">{p.location} | In-Charge: {p.inCharge}</div>
                             </td>
                             <td className="px-6 py-4 font-bold text-sm text-slate-600">{formatCurrency(p.budget)}</td>
                             <td className="px-6 py-4 font-bold text-sm text-emerald-600">{formatCurrency(spent)}</td>
                             <td className="px-6 py-4 font-bold text-sm text-orange-600">{formatCurrency(pendingAmt)}</td>
                             <td className="px-6 py-4">
-                              <div className="flex flex-col gap-1.5 min-w-[120px]">
+                              <div className="flex flex-col gap-1.5 min-w-[140px]">
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
-                                  <span>Spent</span>
-                                  <span>{percent.toFixed(1)}%</span>
+                                  <span>Paid: {percent.toFixed(0)}%</span>
+                                  <span>Exposure: {exposurePercent.toFixed(0)}%</span>
                                 </div>
-                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden relative">
-                                  {/* Exposure bar (lighter) */}
+                                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative shadow-inner">
                                   <div 
-                                    className="absolute top-0 left-0 h-full bg-orange-200 transition-all duration-1000" 
+                                    className="absolute top-0 left-0 h-full bg-orange-200 transition-all duration-700" 
                                     style={{ width: `${exposurePercent}%` }}
                                   ></div>
-                                  {/* Spent bar (darker) */}
                                   <div 
-                                    className={`absolute top-0 left-0 h-full transition-all duration-1000 ${percent > 90 ? 'bg-red-600' : percent > 60 ? 'bg-emerald-600' : 'bg-blue-600'}`} 
+                                    className={`absolute top-0 left-0 h-full transition-all duration-700 ${percent > 90 ? 'bg-red-600' : percent > 60 ? 'bg-emerald-600' : 'bg-blue-600'}`} 
                                     style={{ width: `${percent}%` }}
                                   ></div>
                                 </div>
@@ -217,19 +218,24 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                             <td className="px-6 py-4 text-right">
                               <button 
                                 onClick={() => setExpandedProjectId(expandedProjectId === p.id ? null : p.id)}
-                                className="text-xs font-black text-blue-600 uppercase border-2 border-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                className={`text-xs font-black uppercase border-2 px-3 py-1.5 rounded-lg transition-all shadow-sm ${expandedProjectId === p.id ? 'bg-blue-600 text-white border-blue-600' : 'text-blue-600 border-blue-600 hover:bg-blue-600 hover:text-white'}`}
                               >
-                                {expandedProjectId === p.id ? 'Hide Details' : 'Financials'}
+                                {expandedProjectId === p.id ? 'Hide Details' : 'View Ledger'}
                               </button>
                             </td>
                           </tr>
                           {expandedProjectId === p.id && (
                             <tr className="bg-slate-50/80">
-                              <td colSpan={6} className="px-8 py-6">
-                                <div className="bg-white rounded-xl border-2 border-blue-100 shadow-lg overflow-hidden">
-                                  <div className="p-4 bg-blue-600 text-white flex justify-between items-center">
-                                    <h4 className="font-black text-xs uppercase tracking-widest">Complete Project Transaction Ledger: {p.name}</h4>
-                                    <span className="text-[10px] opacity-80 font-bold uppercase">Total Transactions: {requests.filter(r => r.projectId === p.id).length}</span>
+                              <td colSpan={6} className="px-8 py-6 animate-in slide-in-from-top-2 duration-300">
+                                <div className="bg-white rounded-xl border-2 border-blue-200 shadow-2xl overflow-hidden">
+                                  <div className="p-4 bg-blue-700 text-white flex justify-between items-center">
+                                    <div>
+                                      <h4 className="font-black text-xs uppercase tracking-widest">Transaction Ledger: {p.name}</h4>
+                                      <p className="text-[9px] opacity-70 font-bold uppercase">This record contains all requests including completed payments</p>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                      <span className="text-[10px] font-bold uppercase bg-white/20 px-2 py-1 rounded">Total Entries: {requests.filter(r => r.projectId === p.id).length}</span>
+                                    </div>
                                   </div>
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-left">
@@ -237,23 +243,22 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                                         <tr className="border-b border-slate-100 bg-slate-50/50">
                                           <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Ref ID</th>
                                           <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Vendor</th>
-                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Purpose Breakdown</th>
-                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Compliance</th>
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Purpose & Phase</th>
                                           <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Status</th>
                                           <th className="p-4 text-[10px] font-bold text-slate-500 uppercase text-right">Amount</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-50">
                                         {requests.filter(r => r.projectId === p.id).length === 0 ? (
-                                          <tr><td colSpan={6} className="p-12 text-center text-slate-400 italic text-sm">No financial activity recorded for this project yet.</td></tr>
+                                          <tr><td colSpan={5} className="p-12 text-center text-slate-400 italic text-sm">No historical data available for this project.</td></tr>
                                         ) : (
-                                          requests.filter(r => r.projectId === p.id).map(tr => (
-                                            <tr key={tr.id} className={`text-xs ${tr.status === PaymentStatus.PAID ? 'bg-emerald-50/30' : ''}`}>
+                                          requests.filter(r => r.projectId === p.id).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(tr => (
+                                            <tr key={tr.id} className={`text-xs transition-colors ${tr.status === PaymentStatus.PAID ? 'bg-emerald-50/20' : ''}`}>
                                               <td className="p-4 font-mono font-bold text-slate-500">{tr.id}</td>
-                                              <td className="p-4 uppercase font-bold text-slate-700">{tr.vendorName}</td>
-                                              <td className="p-4 italic text-slate-600 font-medium">{tr.purpose}</td>
-                                              <td className="p-4 font-bold text-[10px] uppercase">
-                                                <span className={tr.cutoffStatus === 'WITHIN' ? 'text-emerald-600' : 'text-red-600'}>{tr.cutoffStatus}</span>
+                                              <td className="p-4 uppercase font-bold text-slate-800">{tr.vendorName}</td>
+                                              <td className="p-4">
+                                                <div className="font-medium italic text-slate-600 line-clamp-1">{tr.purpose}</div>
+                                                <div className="text-[9px] font-bold text-blue-500 uppercase">{tr.projectPhase}</div>
                                               </td>
                                               <td className="p-4"><StatusBadge status={tr.status} /></td>
                                               <td className="p-4 text-right font-black text-slate-900">{formatCurrency(tr.amount)}</td>
@@ -263,14 +268,22 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                                       </tbody>
                                     </table>
                                   </div>
-                                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-6">
-                                      <div className="text-right">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Cumulative Spent</p>
+                                  <div className="p-6 bg-slate-50 border-t border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Initial Budget</p>
+                                        <p className="text-sm font-black text-slate-900">{formatCurrency(p.budget)}</p>
+                                      </div>
+                                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Total Settled (Paid)</p>
                                         <p className="text-sm font-black text-emerald-600">{formatCurrency(spent)}</p>
                                       </div>
-                                      <div className="text-right">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Pending Liabilities</p>
+                                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Active Liabilities</p>
                                         <p className="text-sm font-black text-orange-600">{formatCurrency(pendingAmt)}</p>
+                                      </div>
+                                      <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Financial Margin</p>
+                                        <p className="text-sm font-black text-blue-700">{formatCurrency(p.budget - spent)}</p>
                                       </div>
                                   </div>
                                 </div>
