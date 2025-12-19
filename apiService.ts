@@ -1,33 +1,81 @@
 
-import { Project, Vendor, PaymentRequest, AuditLog, PaymentStatus, Role } from './types';
-
-// In a real production app, this would be your Cloud Run URL
-const API_BASE_URL = '/api'; 
+import { Project, Vendor, PaymentRequest, AuditLog, PaymentStatus } from './types';
 
 /**
- * Service to handle all communication with the centralized Firestore backend.
- * Implementation uses a fallback to localStorage for immediate preview capability,
- * but is structured for production fetch calls.
+ * IGO COMPLIANCE - CENTRALIZED API SERVICE
+ * Targets the server.js Express backend.
  */
+
+const API_BASE_URL = '/api';
+
 class APIService {
-  private isMock = true; // Set to false when backend is deployed
+  private isServerAvailable = false;
 
   private async request(endpoint: string, options: any = {}) {
-    if (this.isMock) return this.mockRequest(endpoint, options);
-    
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('igo_token')}`,
-        ...options.headers,
-      },
-    });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+
+      if (!response.ok) {
+        // If we get a 404, the server is there but the route is wrong, 
+        // but often in dev, a 404 on /api means the proxy/backend isn't running.
+        if (response.status === 404) {
+          throw new Error('SERVER_404');
+        }
+        const errorText = await response.text();
+        throw new Error(`API_${response.status}: ${errorText}`);
+      }
+      
+      this.isServerAvailable = true;
+      return response.json();
+    } catch (error: any) {
+      if (error.message === 'SERVER_404' || error.name === 'TypeError') {
+        this.isServerAvailable = false;
+        return this.fallback(endpoint, options);
+      }
+      throw error;
+    }
   }
 
-  // --- Projects ---
+  /**
+   * FALLBACK MECHANISM
+   * If the cloud server is unreachable, we use local storage 
+   * so the user can continue working, but sync will be disabled.
+   */
+  private async fallback(endpoint: string, options: any) {
+    const key = `igo_local_${endpoint.split('/')[1]}`;
+    const localData = localStorage.getItem(key);
+    const data = localData ? JSON.parse(localData) : [];
+
+    if (options.method === 'POST') {
+      const newItem = JSON.parse(options.body);
+      data.unshift(newItem);
+      localStorage.setItem(key, JSON.stringify(data));
+      return newItem;
+    }
+
+    if (options.method === 'PATCH') {
+      const id = endpoint.split('/').pop();
+      const update = JSON.parse(options.body);
+      const updatedData = data.map((item: any) => 
+        item.id === id ? { ...item, ...update } : item
+      );
+      localStorage.setItem(key, JSON.stringify(updatedData));
+      return { success: true };
+    }
+
+    return data;
+  }
+
+  public getStatus() {
+    return this.isServerAvailable;
+  }
+
   async getProjects(): Promise<Project[]> {
     return this.request('/projects');
   }
@@ -36,7 +84,6 @@ class APIService {
     return this.request('/projects', { method: 'POST', body: JSON.stringify(project) });
   }
 
-  // --- Vendors ---
   async getVendors(): Promise<Vendor[]> {
     return this.request('/vendors');
   }
@@ -45,7 +92,6 @@ class APIService {
     return this.request('/vendors', { method: 'POST', body: JSON.stringify(vendor) });
   }
 
-  // --- Payments ---
   async getRequests(): Promise<PaymentRequest[]> {
     return this.request('/payments');
   }
@@ -61,75 +107,12 @@ class APIService {
     });
   }
 
-  // --- Audit ---
   async getAuditLogs(): Promise<AuditLog[]> {
     return this.request('/audit');
   }
 
   async createAuditLog(log: AuditLog): Promise<AuditLog> {
     return this.request('/audit', { method: 'POST', body: JSON.stringify(log) });
-  }
-
-  // --- Mock Implementation (For Preview) ---
-  private async mockRequest(endpoint: string, options: any) {
-    const get = (key: string) => JSON.parse(localStorage.getItem(key) || '[]');
-    const set = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
-
-    await new Promise(r => setTimeout(r, 100)); // Simulate latency
-
-    if (endpoint === '/projects') {
-      if (options.method === 'POST') {
-        const data = get('igo_projects');
-        const newItem = JSON.parse(options.body);
-        data.push(newItem);
-        set('igo_projects', data);
-        return newItem;
-      }
-      return get('igo_projects');
-    }
-
-    if (endpoint === '/vendors') {
-      if (options.method === 'POST') {
-        const data = get('igo_vendors');
-        const newItem = JSON.parse(options.body);
-        data.push(newItem);
-        set('igo_vendors', data);
-        return newItem;
-      }
-      return get('igo_vendors');
-    }
-
-    if (endpoint === '/payments') {
-      if (options.method === 'POST') {
-        const data = get('igo_requests');
-        const newItem = JSON.parse(options.body);
-        data.unshift(newItem);
-        set('igo_requests', data);
-        return newItem;
-      }
-      return get('igo_requests');
-    }
-
-    if (endpoint.startsWith('/payments/') && options.method === 'PATCH') {
-      const id = endpoint.split('/').pop();
-      const patch = JSON.parse(options.body);
-      const data = get('igo_requests').map((r: any) => r.id === id ? { ...r, ...patch } : r);
-      set('igo_requests', data);
-      return { success: true };
-    }
-
-    if (endpoint === '/audit') {
-      if (options.method === 'POST') {
-        const data = get('igo_logs');
-        const newItem = JSON.parse(options.body);
-        data.unshift(newItem);
-        set('igo_logs', data);
-        return newItem;
-      }
-      return get('igo_logs');
-    }
-    
-    return [];
   }
 }
 

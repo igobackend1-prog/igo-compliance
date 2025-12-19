@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Role, Project, Vendor, PaymentRequest, AuditLog, PaymentStatus } from './types';
 import { STATIC_USERS } from './constants';
 import Layout from './components/Layout';
@@ -9,50 +9,18 @@ import AccountsDashboard from './views/AccountsDashboard';
 import AdminDashboard from './views/AdminDashboard';
 import { api } from './apiService';
 
-const syncChannel = new BroadcastChannel('igo_compliance_sync');
-
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{message: string, type: 'info' | 'warning' | 'error'} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
-  const playNotifySound = () => {
-    try {
-      const context = new AudioContext();
-      const osc = context.createOscillator();
-      const gain = context.createGain();
-      osc.connect(gain);
-      gain.connect(context.destination);
-      osc.frequency.setValueAtTime(440, context.currentTime);
-      gain.gain.setValueAtTime(0.05, context.currentTime);
-      osc.start();
-      osc.stop(context.currentTime + 0.1);
-    } catch (e) {}
-  };
-
-  const addAuditLog = useCallback(async (action: string, paymentId: string) => {
-    if (!currentUser) return;
-    const newLog: AuditLog = {
-      id: Math.random().toString(36).substr(2, 9),
-      action,
-      paymentId,
-      user: currentUser.name,
-      role: currentUser.role,
-      timestamp: new Date().toISOString()
-    };
-    const savedLog = await api.createAuditLog(newLog);
-    setAuditLogs(prev => [savedLog, ...prev]);
-    syncChannel.postMessage({ type: 'LOG_CREATED', payload: savedLog });
-  }, [currentUser]);
-
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const [p, v, r, l] = await Promise.all([
         api.getProjects(),
@@ -64,8 +32,10 @@ const App: React.FC = () => {
       setVendors(v);
       setRequests(r);
       setAuditLogs(l);
+      setIsConnected(api.getStatus());
     } catch (err) {
-      console.error("Failed to load cloud data", err);
+      console.warn("Sync failed. Check if server.js is running.");
+      setIsConnected(false);
     } finally {
       setIsLoading(false);
     }
@@ -77,36 +47,25 @@ const App: React.FC = () => {
       setCurrentUser(JSON.parse(storedUser));
     }
     loadData();
+    
+    // Check for updates every 10 seconds
+    const interval = setInterval(loadData, 10000);
+    return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    const handleSync = (event: MessageEvent) => {
-      const { type, payload } = event.data;
-      if (type === 'STATE_REFRESH') loadData();
-      if (type === 'NEW_REQUEST' && currentUser?.role === Role.CEO) {
-        setNotification({ message: "Cloud: New Payment Request Detected!", type: 'info' });
-        playNotifySound();
-        loadData();
-      }
-    };
-    syncChannel.onmessage = handleSync;
-    return () => { syncChannel.onmessage = null; };
-  }, [currentUser]);
 
   const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const username = formData.get('username') as string;
-    const password = formData.get('password') as string;
-    
-    const user = STATIC_USERS.find(u => u.username === username && u.password === password);
+    const u = formData.get('username') as string;
+    const p = formData.get('password') as string;
+    const user = STATIC_USERS.find(x => x.username === u && x.password === p);
     if (user) {
-      const userToSet = { id: user.id, username: user.username, name: user.name, role: user.role };
-      setCurrentUser(userToSet);
-      localStorage.setItem('igo_user', JSON.stringify(userToSet));
+      const uData = { id: user.id, username: user.username, name: user.name, role: user.role };
+      setCurrentUser(uData);
+      localStorage.setItem('igo_user', JSON.stringify(uData));
       setAuthError(null);
     } else {
-      setAuthError('Invalid credentials. Access denied.');
+      setAuthError('Access Denied: Invalid Credentials');
     }
   };
 
@@ -117,128 +76,44 @@ const App: React.FC = () => {
 
   const renderDashboard = () => {
     if (!currentUser) return null;
-    if (isLoading) return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Synchronizing Cloud Data...</p>
-      </div>
-    );
+    
+    if (isLoading && requests.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verifying Connection...</p>
+        </div>
+      );
+    }
 
     switch (currentUser.role) {
       case Role.CEO:
-        return (
-          <CEODashboard 
-            requests={requests} 
-            projects={projects}
-            onUpdateStatus={async (id, status) => {
-              await api.updateRequestStatus(id, status);
-              await addAuditLog(`CEO ACTION: ${status}`, id);
-              loadData();
-              syncChannel.postMessage({ type: 'STATE_REFRESH' });
-            }} 
-          />
-        );
+        return <CEODashboard requests={requests} projects={projects} onUpdateStatus={async (id, s) => { await api.updateRequestStatus(id, s); loadData(); }} />;
       case Role.BACKEND:
-        return (
-          <BackendDashboard 
-            user={currentUser}
-            projects={projects}
-            vendors={vendors}
-            requests={requests}
-            onSubmitRequest={async (req) => {
-              await api.createRequest(req);
-              await addAuditLog('BACKEND: Request Raised', req.id);
-              loadData();
-              syncChannel.postMessage({ type: 'NEW_REQUEST' });
-            }}
-          />
-        );
+        return <BackendDashboard user={currentUser} projects={projects} vendors={vendors} requests={requests} onSubmitRequest={async (r) => { await api.createRequest(r); loadData(); }} />;
       case Role.ACCOUNTS:
-        return (
-          <AccountsDashboard 
-            requests={requests}
-            onMarkPaid={async (id, utr, screenshot) => {
-              await api.updateRequestStatus(id, PaymentStatus.PAID, { utr, screenshot });
-              await addAuditLog('ACCOUNTS: Payment Disbursed', id);
-              loadData();
-              syncChannel.postMessage({ type: 'STATE_REFRESH' });
-            }}
-          />
-        );
+        return <AccountsDashboard requests={requests} onMarkPaid={async (id, utr, img) => { await api.updateRequestStatus(id, PaymentStatus.PAID, { utr, screenshot: img }); loadData(); }} />;
       case Role.ADMIN:
-        return (
-          <AdminDashboard 
-            projects={projects}
-            vendors={vendors}
-            requests={requests}
-            logs={auditLogs}
-            onUpdateProjects={async (newProjects) => {
-              const last = newProjects[newProjects.length - 1];
-              await api.createProject(last);
-              await addAuditLog('ADMIN: Project Registered', last.id);
-              loadData();
-            }}
-            onUpdateVendors={async (newVendors) => {
-              const last = newVendors[newVendors.length - 1];
-              await api.createVendor(last);
-              await addAuditLog('ADMIN: Vendor Onboarded', last.id);
-              loadData();
-            }}
-            onUpdateRequest={(updated) => {}}
-            onDeleteRequest={(id) => {}}
-          />
-        );
+        return <AdminDashboard projects={projects} vendors={vendors} requests={requests} logs={auditLogs} onUpdateProjects={async (ps) => { await api.createProject(ps[ps.length-1]); loadData(); }} onUpdateVendors={async (vs) => { await api.createVendor(vs[vs.length-1]); loadData(); }} onUpdateRequest={()=>{}} onDeleteRequest={()=>{}} />;
       default: return null;
     }
   };
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-          <div className="p-8 bg-slate-900 text-white text-center">
-            <h1 className="text-2xl font-black tracking-tighter">IGO COMPLIANCE</h1>
-            <p className="text-[10px] uppercase font-bold tracking-widest opacity-60 mt-1">Authorized Personnel Only</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="p-10 bg-slate-900 text-white text-center">
+            <h1 className="text-3xl font-black tracking-tighter">IGO COMPLIANCE</h1>
+            <p className="text-[10px] uppercase font-bold tracking-[0.2em] opacity-50 mt-2">Internal Audit Gateway</p>
           </div>
-          <div className="p-8">
+          <div className="p-10">
             <form onSubmit={handleLogin} className="space-y-6">
-              {authError && (
-                <div className="bg-red-50 border-l-4 border-red-500 p-4 text-red-700 text-xs font-bold uppercase tracking-tight">
-                  {authError}
-                </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
-                <input 
-                  name="username" 
-                  type="text" 
-                  required 
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
-                  placeholder="Employee ID"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Password</label>
-                <input 
-                  name="password" 
-                  type="password" 
-                  required 
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
-                  placeholder="••••••••"
-                />
-              </div>
-              <button 
-                type="submit" 
-                className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-all uppercase tracking-widest text-xs shadow-xl shadow-slate-200"
-              >
-                Access Control System
-              </button>
+              {authError && <div className="bg-red-50 p-4 border-l-4 border-red-500 text-red-700 text-[10px] font-black uppercase">{authError}</div>}
+              <input name="username" placeholder="Employee ID" required className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" />
+              <input name="password" type="password" placeholder="Terminal Password" required className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" />
+              <button type="submit" className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 uppercase tracking-widest text-xs transition-transform active:scale-95">Verify & Connect</button>
             </form>
-            <div className="mt-8 pt-6 border-t border-slate-100">
-              <p className="text-[9px] text-slate-400 font-bold uppercase text-center leading-relaxed">
-                Notice: All activity on this terminal is recorded and subject to Dr. John Yesudhas's compliance audit.
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -247,23 +122,27 @@ const App: React.FC = () => {
 
   return (
     <Layout user={currentUser} onLogout={handleLogout}>
-      {notification && (
-        <div className="fixed top-20 right-8 z-[100] animate-in slide-in-from-right-10 duration-500">
-          <div className="bg-white border-l-4 border-blue-600 shadow-2xl rounded-lg p-5 flex items-start gap-4 max-w-sm">
-            <div className="bg-blue-100 p-2 rounded-full">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-bold text-slate-800 text-sm">{notification.message}</h4>
-              <button onClick={() => setNotification(null)} className="mt-2 text-[10px] font-black uppercase text-blue-600">Dismiss Alert</button>
-            </div>
+      {/* CONNECTION STATUS BANNER */}
+      {!isConnected && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-4 animate-in slide-in-from-top duration-500">
+          <div className="bg-amber-100 p-2 rounded-lg">
+            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Local-Only Mode Enabled</p>
+            <p className="text-[10px] text-amber-700">Cloud synchronization is offline. Data entered will only be visible on this device until the server is connected.</p>
           </div>
         </div>
       )}
+      
       {renderDashboard()}
-      <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-slate-900/10 backdrop-blur px-3 py-1 rounded-full text-[10px] font-bold text-slate-500">
-        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-        CLOUD STORAGE: ACTIVE
+
+      {/* FOOTER CLOUD STATUS */}
+      <div className="fixed bottom-6 right-6 flex items-center gap-3 bg-white/90 backdrop-blur shadow-2xl border border-slate-200 px-4 py-2.5 rounded-full z-50">
+        <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${isConnected ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]'}`}></span>
+        <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.1em]">
+          {isConnected ? 'Cloud Synchronized' : 'Standalone Terminal'}
+        </span>
       </div>
     </Layout>
   );
