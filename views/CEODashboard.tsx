@@ -25,6 +25,12 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
       .reduce((sum, r) => sum + r.amount, 0);
   };
 
+  const calculatePendingProjectAmount = (projectId: string) => {
+    return requests
+      .filter(r => r.projectId === projectId && r.status !== PaymentStatus.PAID && r.status !== PaymentStatus.HOLD)
+      .reduce((sum, r) => sum + r.amount, 0);
+  };
+
   return (
     <div className="space-y-8">
       {/* KPI Cards */}
@@ -59,7 +65,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
           onClick={() => setActiveTab('projects')}
           className={`pb-4 text-sm font-bold transition-all border-b-2 ${activeTab === 'projects' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
-          PROJECT FINANCIALS & MASTER
+          PROJECT MASTER & BUDGETING
         </button>
       </div>
 
@@ -96,7 +102,7 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                           {req.category === 'Project' ? (
                             <div className="space-y-1">
                               <div className="text-sm font-semibold text-blue-700">{project?.name || req.projectId}</div>
-                              <div className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded inline-block font-bold">PHASE: {req.projectPhase}</div>
+                              <div className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded inline-block font-bold uppercase">PHASE: {req.projectPhase}</div>
                             </div>
                           ) : (
                             <div className="text-xs font-medium text-slate-400 uppercase italic">Non-Project Vertical</div>
@@ -150,8 +156,9 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
       ) : (
         <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 bg-slate-50/30">
-              <h3 className="text-lg font-bold text-slate-800">Real-time Budget Tracking</h3>
+            <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-800">Master Project Controls</h3>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest italic">All project data is permanent and auditable</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -159,85 +166,121 @@ const CEODashboard: React.FC<CEOProps> = ({ requests, projects, onUpdateStatus }
                   <tr className="bg-slate-50/50">
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Project ID & Name</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Budget</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Paid (Spent)</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Remaining</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Utilization</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Spent (Paid)</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Exposure (Pending)</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Budget Utilization</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {projects.map(p => {
-                    const spent = calculateSpent(p.id);
-                    const remaining = p.budget - spent;
-                    const percent = Math.min((spent / p.budget) * 100, 100);
-                    return (
-                      <React.Fragment key={p.id}>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-slate-800 text-sm">{p.id}</div>
-                            <div className="text-sm font-semibold text-blue-600">{p.name}</div>
-                            <div className="text-[10px] text-slate-400 uppercase font-bold">{p.location}</div>
-                          </td>
-                          <td className="px-6 py-4 font-bold text-sm text-slate-600">{formatCurrency(p.budget)}</td>
-                          <td className="px-6 py-4 font-bold text-sm text-emerald-600">{formatCurrency(spent)}</td>
-                          <td className="px-6 py-4 font-bold text-sm text-slate-900">{formatCurrency(remaining)}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden min-w-[100px]">
-                                <div className={`h-full transition-all duration-1000 ${percent > 90 ? 'bg-red-600' : percent > 60 ? 'bg-orange-400' : 'bg-blue-500'}`} style={{ width: `${percent}%` }}></div>
-                              </div>
-                              <span className="text-xs font-bold text-slate-500">{percent.toFixed(0)}%</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => setExpandedProjectId(expandedProjectId === p.id ? null : p.id)}
-                              className="text-xs font-black text-blue-600 uppercase border border-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-all"
-                            >
-                              {expandedProjectId === p.id ? 'Hide History' : 'View All'}
-                            </button>
-                          </td>
-                        </tr>
-                        {expandedProjectId === p.id && (
-                          <tr className="bg-slate-50/80">
-                            <td colSpan={6} className="px-8 py-6">
-                              <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
-                                <div className="p-4 border-b border-slate-100 font-bold text-xs uppercase text-slate-500 tracking-widest">Complete Transaction History: {p.name}</div>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-left">
-                                    <thead>
-                                      <tr className="border-b border-slate-50">
-                                        <th className="p-4 text-[10px] font-bold text-slate-400 uppercase">Ref ID</th>
-                                        <th className="p-4 text-[10px] font-bold text-slate-400 uppercase">Vendor</th>
-                                        <th className="p-4 text-[10px] font-bold text-slate-400 uppercase">Purpose</th>
-                                        <th className="p-4 text-[10px] font-bold text-slate-400 uppercase">Status</th>
-                                        <th className="p-4 text-[10px] font-bold text-slate-400 uppercase text-right">Amount</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                      {requests.filter(r => r.projectId === p.id).length === 0 ? (
-                                        <tr><td colSpan={5} className="p-8 text-center text-slate-400 italic text-xs">No transactions recorded for this project.</td></tr>
-                                      ) : (
-                                        requests.filter(r => r.projectId === p.id).map(tr => (
-                                          <tr key={tr.id} className="text-xs">
-                                            <td className="p-4 font-mono font-bold text-slate-500">{tr.id}</td>
-                                            <td className="p-4 uppercase font-bold text-slate-700">{tr.vendorName}</td>
-                                            <td className="p-4 italic text-slate-600">{tr.purpose}</td>
-                                            <td className="p-4"><StatusBadge status={tr.status} /></td>
-                                            <td className="p-4 text-right font-black text-slate-900">{formatCurrency(tr.amount)}</td>
-                                          </tr>
-                                        ))
-                                      )}
-                                    </tbody>
-                                  </table>
+                  {projects.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No projects registered in the system.</td></tr>
+                  ) : (
+                    projects.map(p => {
+                      const spent = calculateSpent(p.id);
+                      const pendingAmt = calculatePendingProjectAmount(p.id);
+                      const totalExposure = spent + pendingAmt;
+                      const percent = Math.min((spent / p.budget) * 100, 100);
+                      const exposurePercent = Math.min((totalExposure / p.budget) * 100, 100);
+
+                      return (
+                        <React.Fragment key={p.id}>
+                          <tr className={`hover:bg-slate-50 transition-colors ${expandedProjectId === p.id ? 'bg-blue-50/20' : ''}`}>
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-800 text-sm">{p.id}</div>
+                              <div className="text-sm font-black text-blue-700 uppercase tracking-tight">{p.name}</div>
+                              <div className="text-[10px] text-slate-400 font-bold">{p.location} | In-Charge: {p.inCharge}</div>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-sm text-slate-600">{formatCurrency(p.budget)}</td>
+                            <td className="px-6 py-4 font-bold text-sm text-emerald-600">{formatCurrency(spent)}</td>
+                            <td className="px-6 py-4 font-bold text-sm text-orange-600">{formatCurrency(pendingAmt)}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col gap-1.5 min-w-[120px]">
+                                <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
+                                  <span>Spent</span>
+                                  <span>{percent.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden relative">
+                                  {/* Exposure bar (lighter) */}
+                                  <div 
+                                    className="absolute top-0 left-0 h-full bg-orange-200 transition-all duration-1000" 
+                                    style={{ width: `${exposurePercent}%` }}
+                                  ></div>
+                                  {/* Spent bar (darker) */}
+                                  <div 
+                                    className={`absolute top-0 left-0 h-full transition-all duration-1000 ${percent > 90 ? 'bg-red-600' : percent > 60 ? 'bg-emerald-600' : 'bg-blue-600'}`} 
+                                    style={{ width: `${percent}%` }}
+                                  ></div>
                                 </div>
                               </div>
                             </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => setExpandedProjectId(expandedProjectId === p.id ? null : p.id)}
+                                className="text-xs font-black text-blue-600 uppercase border-2 border-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                              >
+                                {expandedProjectId === p.id ? 'Hide Details' : 'Financials'}
+                              </button>
+                            </td>
                           </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                          {expandedProjectId === p.id && (
+                            <tr className="bg-slate-50/80">
+                              <td colSpan={6} className="px-8 py-6">
+                                <div className="bg-white rounded-xl border-2 border-blue-100 shadow-lg overflow-hidden">
+                                  <div className="p-4 bg-blue-600 text-white flex justify-between items-center">
+                                    <h4 className="font-black text-xs uppercase tracking-widest">Complete Project Transaction Ledger: {p.name}</h4>
+                                    <span className="text-[10px] opacity-80 font-bold uppercase">Total Transactions: {requests.filter(r => r.projectId === p.id).length}</span>
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                      <thead>
+                                        <tr className="border-b border-slate-100 bg-slate-50/50">
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Ref ID</th>
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Vendor</th>
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Purpose Breakdown</th>
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Compliance</th>
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase">Status</th>
+                                          <th className="p-4 text-[10px] font-bold text-slate-500 uppercase text-right">Amount</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-50">
+                                        {requests.filter(r => r.projectId === p.id).length === 0 ? (
+                                          <tr><td colSpan={6} className="p-12 text-center text-slate-400 italic text-sm">No financial activity recorded for this project yet.</td></tr>
+                                        ) : (
+                                          requests.filter(r => r.projectId === p.id).map(tr => (
+                                            <tr key={tr.id} className={`text-xs ${tr.status === PaymentStatus.PAID ? 'bg-emerald-50/30' : ''}`}>
+                                              <td className="p-4 font-mono font-bold text-slate-500">{tr.id}</td>
+                                              <td className="p-4 uppercase font-bold text-slate-700">{tr.vendorName}</td>
+                                              <td className="p-4 italic text-slate-600 font-medium">{tr.purpose}</td>
+                                              <td className="p-4 font-bold text-[10px] uppercase">
+                                                <span className={tr.cutoffStatus === 'WITHIN' ? 'text-emerald-600' : 'text-red-600'}>{tr.cutoffStatus}</span>
+                                              </td>
+                                              <td className="p-4"><StatusBadge status={tr.status} /></td>
+                                              <td className="p-4 text-right font-black text-slate-900">{formatCurrency(tr.amount)}</td>
+                                            </tr>
+                                          ))
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-6">
+                                      <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Cumulative Spent</p>
+                                        <p className="text-sm font-black text-emerald-600">{formatCurrency(spent)}</p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Pending Liabilities</p>
+                                        <p className="text-sm font-black text-orange-600">{formatCurrency(pendingAmt)}</p>
+                                      </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

@@ -21,7 +21,7 @@ const App: React.FC = () => {
   // Load persistence
   useEffect(() => {
     const storedProjects = localStorage.getItem('igo_projects');
-    const storedVendors = localStorage.getItem('Log_vendors'); // Fixed key typo
+    const storedVendors = localStorage.getItem('igo_vendors');
     const storedRequests = localStorage.getItem('igo_requests');
     const storedLogs = localStorage.getItem('igo_logs');
     const storedUser = localStorage.getItem('igo_user');
@@ -152,7 +152,7 @@ const App: React.FC = () => {
       case Role.ACCOUNTS:
         return (
           <AccountsDashboard 
-            requests={requests} // Pass all requests so the accountant can see history
+            requests={requests}
             onMarkPaid={(id, utr, screenshot) => {
               setRequests(prev => prev.map(r => r.id === id ? { ...r, status: PaymentStatus.PAID, utr, screenshot } : r));
               addAuditLog('Payment Processed', id);

@@ -14,6 +14,7 @@ interface BackendProps {
 
 const BackendDashboard: React.FC<BackendProps> = ({ user, projects, vendors, requests, onSubmitRequest }) => {
   const [showForm, setShowForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'completed'>('all');
   const [category, setCategory] = useState<'Project' | 'Non-Project'>('Project');
   const [bankMismatch, setBankMismatch] = useState(false);
 
@@ -64,13 +65,18 @@ const BackendDashboard: React.FC<BackendProps> = ({ user, projects, vendors, req
   };
 
   const myRequests = requests.filter(r => r.raisedBy === user.name);
+  const filteredRequests = myRequests.filter(r => {
+    if (activeTab === 'pending') return r.status !== PaymentStatus.PAID;
+    if (activeTab === 'completed') return r.status === PaymentStatus.PAID;
+    return true;
+  });
 
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-slate-800">Operational Records</h3>
-          <p className="text-xs text-slate-500 font-medium">All historical and active submissions are tracked here for audit transparency.</p>
+          <p className="text-xs text-slate-500 font-medium tracking-tight">Perpetual history of all payment lifecycles.</p>
         </div>
         <button 
           onClick={() => setShowForm(!showForm)}
@@ -81,7 +87,7 @@ const BackendDashboard: React.FC<BackendProps> = ({ user, projects, vendors, req
       </div>
 
       {showForm && (
-        <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-xl max-w-4xl animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="bg-white p-8 rounded-xl border-2 border-green-100 shadow-xl max-w-4xl animate-in fade-in slide-in-from-top-4 duration-300">
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b pb-2">Basic Identification</h4>
@@ -210,6 +216,13 @@ const BackendDashboard: React.FC<BackendProps> = ({ user, projects, vendors, req
         </div>
       )}
 
+      {/* Tabs for Records */}
+      <div className="flex border-b border-slate-200 gap-6">
+        <button onClick={() => setActiveTab('all')} className={`pb-3 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'all' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>All Records</button>
+        <button onClick={() => setActiveTab('pending')} className={`pb-3 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'pending' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Active / Pipeline</button>
+        <button onClick={() => setActiveTab('completed')} className={`pb-3 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'completed' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Completed (PAID)</button>
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -219,26 +232,26 @@ const BackendDashboard: React.FC<BackendProps> = ({ user, projects, vendors, req
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-center">Risk</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Amount</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Confirmation</th>
+              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Proof of Closure</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {myRequests.length === 0 && (
+            {filteredRequests.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No submissions found.</td>
+                <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No submissions found in this category.</td>
               </tr>
             )}
-            {myRequests.map(req => (
-              <tr key={req.id} className={`transition-colors ${req.status === PaymentStatus.PAID ? 'bg-emerald-50/20' : 'hover:bg-slate-50/50'}`}>
+            {filteredRequests.map(req => (
+              <tr key={req.id} className={`transition-colors ${req.status === PaymentStatus.PAID ? 'bg-emerald-50/10' : 'hover:bg-slate-50/50'}`}>
                 <td className="px-6 py-4">
-                  <div className="font-bold text-sm">{req.id}</div>
-                  <div className="text-[10px] text-slate-400">{new Date(req.timestamp).toLocaleString()}</div>
+                  <div className="font-bold text-sm text-slate-800">{req.id}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">{new Date(req.timestamp).toLocaleString()}</div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-bold uppercase">{req.vendorName}</div>
-                  <div className="text-xs text-slate-500 truncate max-w-xs italic font-medium">{req.purpose}</div>
+                  <div className="text-sm font-bold uppercase text-slate-700 tracking-tight">{req.vendorName}</div>
+                  <div className="text-xs text-slate-500 truncate max-w-xs italic">{req.purpose}</div>
                   {req.category === 'Project' && (
-                    <div className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded inline-block mt-1">Project: {projects.find(p=>p.id === req.projectId)?.name || 'N/A'}</div>
+                    <div className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded inline-block mt-1 uppercase border border-blue-100">{projects.find(p=>p.id === req.projectId)?.name || 'N/A'}</div>
                   )}
                 </td>
                 <td className="px-6 py-4 text-center">
@@ -247,25 +260,26 @@ const BackendDashboard: React.FC<BackendProps> = ({ user, projects, vendors, req
                 <td className="px-6 py-4">
                   <StatusBadge status={req.status} />
                 </td>
-                <td className="px-6 py-4 font-black text-slate-800">
+                <td className="px-6 py-4 font-black text-slate-900">
                   {formatCurrency(req.amount)}
                 </td>
                 <td className="px-6 py-4 text-right">
                   {req.status === PaymentStatus.PAID ? (
-                    <div className="space-y-1">
-                      <div className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 inline-block">UTR: {req.utr}</div>
+                    <div className="space-y-1.5 flex flex-col items-end">
+                      <div className="text-[9px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">UTR: {req.utr}</div>
                       {req.screenshot && (
                         <a 
                           href={req.screenshot} 
-                          download={`proof-${req.id}.png`}
-                          className="block text-[10px] text-blue-700 font-black hover:text-blue-900 underline uppercase tracking-tighter"
+                          download={`IGO-PAID-${req.id}.png`}
+                          className="flex items-center gap-1 text-[9px] text-blue-600 font-black hover:text-blue-800 uppercase tracking-tighter"
                         >
-                          Download Receipt
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                          Download Proof
                         </a>
                       )}
                     </div>
                   ) : (
-                    <span className="text-[10px] text-slate-400 font-bold uppercase italic tracking-widest">Awaiting Closure</span>
+                    <span className="text-[10px] text-slate-300 font-black uppercase tracking-widest italic">Awaiting Action</span>
                   )}
                 </td>
               </tr>
