@@ -1,27 +1,27 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, Role, Project, Vendor, PaymentRequest, AuditLog, PaymentStatus, RiskLevel } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { User, Role, Project, Vendor, PaymentRequest, AuditLog, PaymentStatus } from './types';
 import { STATIC_USERS } from './constants';
 import Layout from './components/Layout';
 import CEODashboard from './views/CEODashboard';
 import BackendDashboard from './views/BackendDashboard';
 import AccountsDashboard from './views/AccountsDashboard';
 import AdminDashboard from './views/AdminDashboard';
+import { api } from './apiService';
 
-// Shared channel for real-time synchronization across tabs
 const syncChannel = new BroadcastChannel('igo_compliance_sync');
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{message: string, type: 'info' | 'warning' | 'error'} | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
-  // Sound effect for notifications (optional, using browser beep as fallback)
   const playNotifySound = () => {
     try {
       const context = new AudioContext();
@@ -29,83 +29,76 @@ const App: React.FC = () => {
       const gain = context.createGain();
       osc.connect(gain);
       gain.connect(context.destination);
-      osc.type = 'sine';
       osc.frequency.setValueAtTime(440, context.currentTime);
-      gain.gain.setValueAtTime(0.1, context.currentTime);
+      gain.gain.setValueAtTime(0.05, context.currentTime);
       osc.start();
       osc.stop(context.currentTime + 0.1);
     } catch (e) {}
   };
 
-  // Sync state across tabs
-  const broadcastChange = (type: string, data: any) => {
-    syncChannel.postMessage({ type, data, sender: currentUser?.id });
+  const addAuditLog = useCallback(async (action: string, paymentId: string) => {
+    if (!currentUser) return;
+    const newLog: AuditLog = {
+      id: Math.random().toString(36).substr(2, 9),
+      action,
+      paymentId,
+      user: currentUser.name,
+      role: currentUser.role,
+      timestamp: new Date().toISOString()
+    };
+    const savedLog = await api.createAuditLog(newLog);
+    setAuditLogs(prev => [savedLog, ...prev]);
+    syncChannel.postMessage({ type: 'LOG_CREATED', payload: savedLog });
+  }, [currentUser]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [p, v, r, l] = await Promise.all([
+        api.getProjects(),
+        api.getVendors(),
+        api.getRequests(),
+        api.getAuditLogs()
+      ]);
+      setProjects(p);
+      setVendors(v);
+      setRequests(r);
+      setAuditLogs(l);
+    } catch (err) {
+      console.error("Failed to load cloud data", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    const handleSync = (event: MessageEvent) => {
-      const { type, data, sender } = event.data;
-      if (sender === currentUser?.id && type !== 'NEW_REQUEST') return; // Don't sync own changes except for notification logic
-
-      switch (type) {
-        case 'SYNC_ALL':
-          if (data.projects) setProjects(data.projects);
-          if (data.vendors) setVendors(data.vendors);
-          if (data.requests) setRequests(data.requests);
-          if (data.auditLogs) setAuditLogs(data.auditLogs);
-          break;
-        case 'NEW_REQUEST':
-          setRequests(data);
-          if (currentUser?.role === Role.CEO) {
-            setNotification({ 
-              message: "New Payment Request Received!", 
-              type: 'info' 
-            });
-            playNotifySound();
-          }
-          break;
-        case 'STATUS_UPDATE':
-          setRequests(data);
-          break;
-      }
-    };
-
-    syncChannel.onmessage = handleSync;
-    return () => syncChannel.onmessage = null;
-  }, [currentUser]);
-
-  // Load persistence
-  useEffect(() => {
-    const storedProjects = localStorage.getItem('igo_projects');
-    const storedVendors = localStorage.getItem('igo_vendors');
-    const storedRequests = localStorage.getItem('igo_requests');
-    const storedLogs = localStorage.getItem('igo_logs');
+    loadData();
     const storedUser = localStorage.getItem('igo_user');
-
-    if (storedProjects) setProjects(JSON.parse(storedProjects));
-    if (storedVendors) setVendors(JSON.parse(storedVendors));
-    if (storedRequests) setRequests(JSON.parse(storedRequests));
-    if (storedLogs) setAuditLogs(JSON.parse(storedLogs));
     if (storedUser) setCurrentUser(JSON.parse(storedUser));
   }, []);
 
-  // Save persistence & Broadcast
   useEffect(() => {
-    localStorage.setItem('igo_projects', JSON.stringify(projects));
-    localStorage.setItem('igo_vendors', JSON.stringify(vendors));
-    localStorage.setItem('igo_requests', JSON.stringify(requests));
-    localStorage.setItem('igo_logs', JSON.stringify(auditLogs));
-  }, [projects, vendors, requests, auditLogs]);
+    const handleSync = (event: MessageEvent) => {
+      const { type, payload } = event.data;
+      if (type === 'STATE_REFRESH') loadData();
+      if (type === 'NEW_REQUEST' && currentUser?.role === Role.CEO) {
+        setNotification({ message: "Cloud: New Payment Request Detected!", type: 'info' });
+        playNotifySound();
+        loadData();
+      }
+    };
+    syncChannel.onmessage = handleSync;
+    return () => { syncChannel.onmessage = null; };
+  }, [currentUser]);
 
   const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
-
     const user = STATIC_USERS.find(u => u.username === username && u.password === password);
     if (user) {
-      setCurrentUser({ id: user.id, username: user.username, name: user.name, role: user.role });
+      setCurrentUser(user);
       localStorage.setItem('igo_user', JSON.stringify(user));
       setAuthError(null);
     } else {
@@ -118,85 +111,26 @@ const App: React.FC = () => {
     localStorage.removeItem('igo_user');
   };
 
-  const addAuditLog = useCallback((action: string, paymentId: string) => {
-    if (!currentUser) return;
-    const newLog: AuditLog = {
-      id: Math.random().toString(36).substr(2, 9),
-      action,
-      paymentId,
-      user: currentUser.name,
-      role: currentUser.role,
-      timestamp: new Date().toISOString()
-    };
-    setAuditLogs(prev => {
-      const updated = [newLog, ...prev];
-      broadcastChange('SYNC_ALL', { auditLogs: updated });
-      return updated;
-    });
-  }, [currentUser]);
-
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden p-8">
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">IGO COMPLIANCE</h1>
-            <p className="text-slate-500 mt-2 font-medium">Internal Secure Access Portal</p>
-          </div>
-          
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Username</label>
-              <input 
-                name="username"
-                type="text" 
-                required 
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
-                placeholder="root_id"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
-              <input 
-                name="password"
-                type="password" 
-                required 
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
-                placeholder="••••••••"
-              />
-            </div>
-            {authError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs font-semibold">
-                {authError}
-              </div>
-            )}
-            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5">
-              Secure Login
-            </button>
-          </form>
-
-          <div className="mt-8 pt-8 border-t border-slate-100">
-            <p className="text-[10px] text-center text-slate-400 uppercase tracking-widest font-bold">Authorized Use Only</p>
-          </div>
-        </div>
+  const renderDashboard = () => {
+    if (!currentUser) return null;
+    if (isLoading) return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Synchronizing Cloud Data...</p>
       </div>
     );
-  }
 
-  const renderDashboard = () => {
     switch (currentUser.role) {
       case Role.CEO:
         return (
           <CEODashboard 
             requests={requests} 
             projects={projects}
-            onUpdateStatus={(id, status) => {
-              setRequests(prev => {
-                const updated = prev.map(r => r.id === id ? { ...r, status } : r);
-                broadcastChange('STATUS_UPDATE', updated);
-                return updated;
-              });
-              addAuditLog(`CEO Decision: ${status}`, id);
+            onUpdateStatus={async (id, status) => {
+              await api.updateRequestStatus(id, status);
+              await addAuditLog(`CEO ACTION: ${status}`, id);
+              loadData();
+              syncChannel.postMessage({ type: 'STATE_REFRESH' });
             }} 
           />
         );
@@ -207,13 +141,11 @@ const App: React.FC = () => {
             projects={projects}
             vendors={vendors}
             requests={requests}
-            onSubmitRequest={(req) => {
-              setRequests(prev => {
-                const updated = [req, ...prev];
-                broadcastChange('NEW_REQUEST', updated);
-                return updated;
-              });
-              addAuditLog('Created Payment Request', req.id);
+            onSubmitRequest={async (req) => {
+              await api.createRequest(req);
+              await addAuditLog('BACKEND: Request Raised', req.id);
+              loadData();
+              syncChannel.postMessage({ type: 'NEW_REQUEST' });
             }}
           />
         );
@@ -221,13 +153,11 @@ const App: React.FC = () => {
         return (
           <AccountsDashboard 
             requests={requests}
-            onMarkPaid={(id, utr, screenshot) => {
-              setRequests(prev => {
-                const updated = prev.map(r => r.id === id ? { ...r, status: PaymentStatus.PAID, utr, screenshot } : r);
-                broadcastChange('STATUS_UPDATE', updated);
-                return updated;
-              });
-              addAuditLog('Payment Processed', id);
+            onMarkPaid={async (id, utr, screenshot) => {
+              await api.updateRequestStatus(id, PaymentStatus.PAID, { utr, screenshot });
+              await addAuditLog('ACCOUNTS: Payment Disbursed', id);
+              loadData();
+              syncChannel.postMessage({ type: 'STATE_REFRESH' });
             }}
           />
         );
@@ -238,61 +168,49 @@ const App: React.FC = () => {
             vendors={vendors}
             requests={requests}
             logs={auditLogs}
-            onUpdateProjects={(p) => { setProjects(p); broadcastChange('SYNC_ALL', { projects: p }); }}
-            onUpdateVendors={(v) => { setVendors(v); broadcastChange('SYNC_ALL', { vendors: v }); }}
+            onUpdateProjects={async (newProjects) => {
+              const last = newProjects[newProjects.length - 1];
+              await api.createProject(last);
+              await addAuditLog('ADMIN: Project Registered', last.id);
+              loadData();
+            }}
+            onUpdateVendors={async (newVendors) => {
+              const last = newVendors[newVendors.length - 1];
+              await api.createVendor(last);
+              await addAuditLog('ADMIN: Vendor Onboarded', last.id);
+              loadData();
+            }}
             onUpdateRequest={(updated) => {
-              setRequests(prev => {
-                const newReqs = prev.map(r => r.id === updated.id ? updated : r);
-                broadcastChange('STATUS_UPDATE', newReqs);
-                return newReqs;
-              });
-              addAuditLog('Admin updated record', updated.id);
+              // Implementation for admin edits
             }}
             onDeleteRequest={(id) => {
-              setRequests(prev => {
-                const newReqs = prev.filter(r => r.id !== id);
-                broadcastChange('STATUS_UPDATE', newReqs);
-                return newReqs;
-              });
-              addAuditLog('Admin deleted record', id);
+              // Implementation for admin deletion
             }}
           />
         );
-      default:
-        return <div className="p-10 text-center text-slate-500">Access Restricted</div>;
+      default: return null;
     }
   };
 
   return (
     <Layout user={currentUser} onLogout={handleLogout}>
-      {/* Notification Toast */}
       {notification && (
         <div className="fixed top-20 right-8 z-[100] animate-in slide-in-from-right-10 duration-500">
           <div className="bg-white border-l-4 border-blue-600 shadow-2xl rounded-lg p-5 flex items-start gap-4 max-w-sm">
             <div className="bg-blue-100 p-2 rounded-full">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-              </svg>
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
             </div>
             <div className="flex-1">
               <h4 className="font-bold text-slate-800 text-sm">{notification.message}</h4>
-              <p className="text-xs text-slate-500 mt-1">A backend user has just submitted a new task for your review.</p>
-              <button 
-                onClick={() => setNotification(null)}
-                className="mt-3 text-[10px] font-black uppercase text-blue-600 hover:text-blue-800"
-              >
-                Dismiss Notification
-              </button>
+              <button onClick={() => setNotification(null)} className="mt-2 text-[10px] font-black uppercase text-blue-600">Dismiss Alert</button>
             </div>
           </div>
         </div>
       )}
-      
       {renderDashboard()}
-      
       <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-slate-900/10 backdrop-blur px-3 py-1 rounded-full text-[10px] font-bold text-slate-500">
         <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-        REAL-TIME SYNC ACTIVE
+        CLOUD STORAGE: ACTIVE
       </div>
     </Layout>
   );

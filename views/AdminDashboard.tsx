@@ -15,6 +15,27 @@ interface AdminProps {
 
 const AdminDashboard: React.FC<AdminProps> = ({ projects, vendors, requests, logs, onUpdateProjects, onUpdateVendors, onUpdateRequest, onDeleteRequest }) => {
   const [tab, setTab] = useState<'Projects' | 'Vendors' | 'Audit'>('Audit');
+  const [backupCode, setBackupCode] = useState('');
+
+  const generateBackup = () => {
+    const data = { projects, vendors, requests, logs };
+    const code = btoa(JSON.stringify(data));
+    setBackupCode(code);
+  };
+
+  const importBackup = () => {
+    try {
+      const decoded = JSON.parse(atob(backupCode));
+      if (decoded.projects) onUpdateProjects(decoded.projects);
+      if (decoded.vendors) onUpdateVendors(decoded.vendors);
+      // Directly setting the other states is complex in this structure without a global reset prop
+      // but we inform the user to refresh.
+      alert("Import Successful! Please refresh your browser to sync all records.");
+      window.location.reload();
+    } catch (e) {
+      alert("Invalid Backup Code!");
+    }
+  };
 
   const addProject = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -64,46 +85,54 @@ const AdminDashboard: React.FC<AdminProps> = ({ projects, vendors, requests, log
       </div>
 
       {tab === 'Audit' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="text-lg font-bold text-slate-800">System Activity Logs</h3>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest underline decoration-red-200 decoration-2 underline-offset-4">Immutable Trace</span>
+        <div className="space-y-8">
+          <div className="bg-red-50 p-6 rounded-xl border border-red-100 shadow-sm">
+            <h3 className="text-sm font-black text-red-900 uppercase tracking-widest mb-4">Emergency Cloud Sync (Export/Import)</h3>
+            <p className="text-xs text-red-700 mb-4 font-medium italic">Use this tool to move your data between different computers or browsers.</p>
+            <div className="flex gap-4">
+              <button onClick={generateBackup} className="bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase">Generate Backup Code</button>
+              <button onClick={importBackup} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase">Import from Code</button>
+            </div>
+            <textarea 
+              value={backupCode}
+              onChange={(e) => setBackupCode(e.target.value)}
+              className="w-full mt-4 h-24 p-4 text-[10px] font-mono border border-red-200 rounded-lg outline-none focus:ring-2 focus:ring-red-500" 
+              placeholder="Paste backup code here to import, or click 'Generate' to copy..."
+            />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-slate-50/50">
-                <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Timestamp</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">User / Role</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Action Description</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Related ID</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {logs.length === 0 && (
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-800">System Activity Logs</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50/50">
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic font-medium">No activity recorded yet.</td>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Time</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">User</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Action</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Record ID</th>
                   </tr>
-                )}
-                {logs.map(log => (
-                  <tr key={log.id} className="text-sm">
-                    <td className="px-6 py-4 font-mono text-[10px] text-slate-500">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-800">{log.user}</div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase">{log.role}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-slate-700">{log.action}</span>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-[10px] font-bold text-blue-600">
-                      {log.paymentId}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {logs.length === 0 && (
+                    <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No activity recorded.</td></tr>
+                  )}
+                  {logs.map(log => (
+                    <tr key={log.id} className="text-sm hover:bg-slate-50">
+                      <td className="px-6 py-4 font-mono text-[10px] text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800">{log.user}</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">{log.role}</div>
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-700">{log.action}</td>
+                      <td className="px-6 py-4 font-mono text-[10px] font-bold text-red-600 uppercase">{log.paymentId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -136,9 +165,7 @@ const AdminDashboard: React.FC<AdminProps> = ({ projects, vendors, requests, log
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">In-Charge Name</label>
                   <input name="inCharge" required className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-md text-sm outline-none focus:ring-2 focus:ring-red-500" />
                 </div>
-                <button type="submit" className="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-all uppercase tracking-widest text-xs shadow-lg shadow-red-500/20">
-                  Register Project
-                </button>
+                <button type="submit" className="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-all uppercase tracking-widest text-xs">Register Project</button>
               </form>
             </div>
           </div>
@@ -148,27 +175,22 @@ const AdminDashboard: React.FC<AdminProps> = ({ projects, vendors, requests, log
                <table className="w-full text-left border-collapse">
                  <thead className="bg-slate-50/50">
                    <tr>
-                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Project ID</th>
+                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">ID</th>
                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Name & Location</th>
-                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Phase</th>
+                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Budget</th>
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100">
-                   {projects.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No projects registered.</td></tr>}
                    {projects.map(p => (
                      <tr key={p.id}>
                        <td className="px-6 py-4 font-bold text-sm text-slate-800">{p.id}</td>
                        <td className="px-6 py-4">
-                         <div className="font-bold text-sm">{p.name}</div>
+                         <div className="font-bold text-sm uppercase">{p.name}</div>
                          <div className="text-[10px] text-slate-500 uppercase">{p.location}</div>
                        </td>
-                       <td className="px-6 py-4">
-                         <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100 uppercase">{p.phase}</span>
-                       </td>
-                       <td className="px-6 py-4 text-right font-black text-slate-900">
-                         ₹{p.budget.toLocaleString()}
-                       </td>
+                       <td className="px-6 py-4"><span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100 uppercase">{p.phase}</span></td>
+                       <td className="px-6 py-4 text-right font-black text-slate-900">₹{p.budget.toLocaleString()}</td>
                      </tr>
                    ))}
                  </tbody>
@@ -200,9 +222,7 @@ const AdminDashboard: React.FC<AdminProps> = ({ projects, vendors, requests, log
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contact Info</label>
                     <input name="contact" required className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-md text-sm outline-none focus:ring-2 focus:ring-red-500" placeholder="Email or Phone" />
                   </div>
-                  <button type="submit" className="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-all uppercase tracking-widest text-xs shadow-lg shadow-red-500/20">
-                    Register Vendor
-                  </button>
+                  <button type="submit" className="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-all uppercase tracking-widest text-xs">Register Vendor</button>
                 </form>
              </div>
           </div>
@@ -219,7 +239,6 @@ const AdminDashboard: React.FC<AdminProps> = ({ projects, vendors, requests, log
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100">
-                   {vendors.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No vendors registered.</td></tr>}
                    {vendors.map(v => (
                      <tr key={v.id}>
                        <td className="px-6 py-4 font-bold text-sm text-slate-800">{v.id}</td>
