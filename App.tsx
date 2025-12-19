@@ -72,9 +72,11 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
     const storedUser = localStorage.getItem('igo_user');
-    if (storedUser) setCurrentUser(JSON.parse(storedUser));
+    if (storedUser) {
+      setCurrentUser(JSON.parse(storedUser));
+    }
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -96,10 +98,12 @@ const App: React.FC = () => {
     const formData = new FormData(e.currentTarget);
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
+    
     const user = STATIC_USERS.find(u => u.username === username && u.password === password);
     if (user) {
-      setCurrentUser(user);
-      localStorage.setItem('igo_user', JSON.stringify(user));
+      const userToSet = { id: user.id, username: user.username, name: user.name, role: user.role };
+      setCurrentUser(userToSet);
+      localStorage.setItem('igo_user', JSON.stringify(userToSet));
       setAuthError(null);
     } else {
       setAuthError('Invalid credentials. Access denied.');
@@ -180,17 +184,66 @@ const App: React.FC = () => {
               await addAuditLog('ADMIN: Vendor Onboarded', last.id);
               loadData();
             }}
-            onUpdateRequest={(updated) => {
-              // Implementation for admin edits
-            }}
-            onDeleteRequest={(id) => {
-              // Implementation for admin deletion
-            }}
+            onUpdateRequest={(updated) => {}}
+            onDeleteRequest={(id) => {}}
           />
         );
       default: return null;
     }
   };
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+          <div className="p-8 bg-slate-900 text-white text-center">
+            <h1 className="text-2xl font-black tracking-tighter">IGO COMPLIANCE</h1>
+            <p className="text-[10px] uppercase font-bold tracking-widest opacity-60 mt-1">Authorized Personnel Only</p>
+          </div>
+          <div className="p-8">
+            <form onSubmit={handleLogin} className="space-y-6">
+              {authError && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 text-red-700 text-xs font-bold uppercase tracking-tight">
+                  {authError}
+                </div>
+              )}
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
+                <input 
+                  name="username" 
+                  type="text" 
+                  required 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
+                  placeholder="Employee ID"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Password</label>
+                <input 
+                  name="password" 
+                  type="password" 
+                  required 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
+                  placeholder="••••••••"
+                />
+              </div>
+              <button 
+                type="submit" 
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-all uppercase tracking-widest text-xs shadow-xl shadow-slate-200"
+              >
+                Access Control System
+              </button>
+            </form>
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              <p className="text-[9px] text-slate-400 font-bold uppercase text-center leading-relaxed">
+                Notice: All activity on this terminal is recorded and subject to Dr. John Yesudhas's compliance audit.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Layout user={currentUser} onLogout={handleLogout}>
