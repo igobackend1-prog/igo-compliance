@@ -1,10 +1,6 @@
 
-import { Project, Vendor, PaymentRequest, AuditLog, PaymentStatus } from './types';
-
-/**
- * IGO COMPLIANCE - HYBRID CLOUD CLIENT
- * Manages the transition between Cloud Mirroring and Terminal Local Storage.
- */
+// Fix: Removed Vendor import as it is not exported from types.ts
+import { Project, PaymentRequest, PaymentStatus } from './types';
 
 const API_BASE = '/api';
 
@@ -32,13 +28,12 @@ class APIService {
       return await res.json();
     } catch (err) {
       this.isConnected = false;
-      // Return a special flag indicating we should use local storage
       return { _isFallback: true };
     }
   }
 
   async createProject(project: Project): Promise<void> {
-    if (!this.isConnected) return; // In local mode, we let the UI handle the state
+    if (!this.isConnected) return;
     await fetch(`${API_BASE}/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -46,14 +41,7 @@ class APIService {
     });
   }
 
-  async createVendor(vendor: Vendor): Promise<void> {
-    if (!this.isConnected) return;
-    await fetch(`${API_BASE}/vendors`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(vendor)
-    });
-  }
+  // Fix: Removed unused createVendor method which relied on the missing Vendor type and missing backend endpoint
 
   async createRequest(payment: PaymentRequest): Promise<void> {
     if (!this.isConnected) return;
@@ -70,6 +58,13 @@ class APIService {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, ...extra })
+    });
+  }
+
+  async deleteRequest(id: string): Promise<void> {
+    if (!this.isConnected) return;
+    await fetch(`${API_BASE}/requests/${id}`, {
+      method: 'DELETE'
     });
   }
 

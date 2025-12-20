@@ -1,6 +1,5 @@
 
 import { PaymentRequest, RiskLevel, PaymentStatus } from './types';
-import { CUT_OFF_HOUR } from './constants';
 
 export const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -9,25 +8,32 @@ export const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-export const checkCutoff = (date: Date): 'WITHIN' | 'MISSED' => {
-  const hour = date.getHours();
-  return hour < CUT_OFF_HOUR ? 'WITHIN' : 'MISSED';
+export const checkCutoff = (submissionDate: Date, deadlineDate: Date): 'WITHIN' | 'MISSED' => {
+  return submissionDate > deadlineDate ? 'MISSED' : 'WITHIN';
 };
 
 export const detectRisk = (
   newRequest: Partial<PaymentRequest>,
-  existingRequests: PaymentRequest[]
+  existingRequests: PaymentRequest[],
+  isCutoffMissed: boolean
 ): { risk: RiskLevel; status: PaymentStatus } => {
-  // Check exact duplicate (same vendor + same bill number)
+  // Check exact duplicate (Already Paid / High Risk)
   const exactDuplicate = existingRequests.find(
-    (r) => r.vendorName === newRequest.vendorName && r.billNumber === newRequest.billNumber
+    (r) => r.vendorName === newRequest.vendorName && 
+           r.billNumber === newRequest.billNumber && 
+           r.billNumber !== '' && 
+           r.status === PaymentStatus.PAID
   );
 
   if (exactDuplicate) {
     return { risk: RiskLevel.HIGH, status: PaymentStatus.SIMILAR_EXISTS };
   }
 
-  // Check similar (same vendor + same amount within 30 days)
+  if (isCutoffMissed) {
+    return { risk: RiskLevel.HIGH, status: PaymentStatus.REQUEST_CUT_OFF_MISSED };
+  }
+
+  // Check similar (Med Risk)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -50,13 +56,4 @@ export const detectRisk = (
 export const generatePaymentId = () => {
   const num = Math.floor(1000 + Math.random() * 9000);
   return `IGO-PAY-${num}`;
-};
-
-export const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
 };

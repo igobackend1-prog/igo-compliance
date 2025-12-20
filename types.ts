@@ -11,7 +11,9 @@ export enum PaymentStatus {
   SIMILAR_EXISTS = 'SIMILAR_EXISTS',
   APPROVED = 'APPROVED',
   HOLD = 'HOLD',
-  PAID = 'PAID'
+  PAID = 'PAID',
+  REQUEST_CUT_OFF_MISSED = 'REQUEST_CUT_OFF_MISSED',
+  PAYMENT_CUT_OFF_MISSED = 'PAYMENT_CUT_OFF_MISSED'
 }
 
 export enum RiskLevel {
@@ -47,40 +49,43 @@ export interface Project {
   status: 'Active' | 'Closed';
 }
 
-export interface Vendor {
-  id: string;
-  name: string;
-  type: 'Company' | 'Contractor' | 'Individual';
-  contact: string;
-  status: 'Active' | 'Inactive';
-}
-
 export interface PaymentRequest {
   id: string;
-  raisedBy: string;
-  timestamp: string;
+  // Requester Responsibility (Text inputs per request)
+  raisedBy: string; 
+  raisedByRole: string;
+  raisedByDepartment: string;
+  
+  timestamp: string; // Submission time
+  paymentDeadline: string; // User-entered cut-off date/time
+  
   category: 'Project' | 'Non-Project';
   purpose: string;
+  
   projectId?: string;
-  projectPhase?: string;
-  currentWork?: string;
-  nextWork?: string;
-  vendorId?: string;
-  vendorName: string;
-  vendorType: string;
-  billNumber: string;
-  billDate: string;
-  amount: number;
-  paymentType: 'Advance' | 'Partial' | 'Final' | 'Full';
+  workOrderNumber?: string;
+  
+  vendorName: string; // Free-text
   paymentMode: 'Bank Transfer' | 'UPI';
   accountNumber?: string;
   ifsc?: string;
   upiId?: string;
+  
+  billNumber?: string;
+  billDate: string;
+  amount: number; // IMMUTABLE
+  paymentType: 'Advance' | 'Partial' | 'Final' | 'Full';
+  
+  driveLinkBills: string;
+  driveLinkWorkProof: string;
+  
   cutoffStatus: 'WITHIN' | 'MISSED';
   risk: RiskLevel;
   status: PaymentStatus;
+  
+  // Settlement
   utr?: string;
-  screenshot?: string;
+  screenshotLink?: string; // Changed to Google Drive link (string)
 }
 
 export interface AuditLog {
@@ -88,6 +93,7 @@ export interface AuditLog {
   action: string;
   paymentId: string;
   user: string;
-  role: Role;
+  role: string;
+  department?: string;
   timestamp: string;
 }

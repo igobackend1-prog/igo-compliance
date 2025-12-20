@@ -1,5 +1,5 @@
 {
-  "name": "IGO COMPLIANCE",
+  "name": "igo-approval",
   "description": "Internal organizational compliance system for payment validation, CEO approval, and audit control.",
   "requestFramePermissions": [
     "camera"
